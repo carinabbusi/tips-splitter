@@ -1,0 +1,40 @@
+#!/bin/bash
+# Runs once when the EC2 instance boots for the first time.
+# Phase 1: prepares the server (Docker + deploy script).
+# Phase 2: the CD pipeline calls /opt/tips-splitter/deploy.sh through SSM.
+set -euo pipefail
+
+dnf update -y
+dnf install -y docker
+systemctl enable --now docker
+
+mkdir -p /opt/tips-splitter
+cat > /opt/tips-splitter/deploy.sh <<'SCRIPT'
+#!/bin/bash
+# Usage: deploy.sh <image-tag>
+set -euo pipefail
+TAG="$${1:-latest}"
+IMAGE="${ecr_url}:$${TAG}"
+
+aws ecr get-login-password --region ${aws_region} \
+  | docker login --username AWS --password-stdin "$(echo ${ecr_url} | cut -d/ -f1)"
+
+docker pull "$${IMAGE}"
+docker rm -f tips-splitter 2>/dev/null || true
+docker run -d --name tips-splitter --restart unless-stopped \
+  -p 80:${app_port} \
+  -e APP_ENV=staging \
+  --log-driver awslogs \
+  --log-opt awslogs-region=${aws_region} \
+  --log-opt awslogs-group=${log_group} \
+  "$${IMAGE}"
+
+# Simple smoke test: fail the deploy if /health does not answer.
+for i in $(seq 1 10); do
+  if curl -fsS http://localhost/health; then exit 0; fi
+  sleep 3
+done
+echo "Health check failed" >&2
+exit 1
+SCRIPT
+chmod +x /opt/tips-splitter/deploy.sh
