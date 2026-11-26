@@ -17,3 +17,13 @@ output "log_group" {
   description = "CloudWatch log group for the application."
   value       = aws_cloudwatch_log_group.app.name
 }
+
+output "github_actions_role_arn" {
+  description = "Role assumed by GitHub Actions (repo variable AWS_ROLE_ARN)."
+  value       = aws_iam_role.github_actions.arn
+}
+
+output "aws_region" {
+  description = "Region used by the pipeline (repo variable AWS_REGION)."
+  value       = var.aws_region
+}

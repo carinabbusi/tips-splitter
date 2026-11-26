@@ -13,7 +13,7 @@ terraform {
   # backend "s3" {
   #   bucket       = "tips-splitter-tfstate-<your-account-id>"
   #   key          = "staging/terraform.tfstate"
-  #   region       = "eu-west-1"
+  #   region       = "eu-north-1"
   #   use_lockfile = true
   # }
 }

@@ -1,7 +1,5 @@
 #!/bin/bash
-# Runs once when the EC2 instance boots for the first time.
-# Phase 1: prepares the server (Docker + deploy script).
-# Phase 2: the CD pipeline calls /opt/tips-splitter/deploy.sh through SSM.
+# first boot: install Docker and the deploy script called by the CD pipeline (via SSM)
 set -euo pipefail
 
 dnf update -y
@@ -29,7 +27,7 @@ docker run -d --name tips-splitter --restart unless-stopped \
   --log-opt awslogs-group=${log_group} \
   "$${IMAGE}"
 
-# Simple smoke test: fail the deploy if /health does not answer.
+# fail the deploy if /health does not answer
 for i in $(seq 1 10); do
   if curl -fsS http://localhost/health; then exit 0; fi
   sleep 3
