@@ -4,6 +4,11 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 }
 
+locals {
+  github_owner = split("/", var.github_repo)[0]
+  github_name  = split("/", var.github_repo)[1]
+}
+
 resource "aws_iam_role" "github_actions" {
   name = "${local.name}-github-actions"
 
@@ -17,7 +22,13 @@ resource "aws_iam_role" "github_actions" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
+        }
+        # GitHub may send the subject with owner/repo IDs (repo:owner@id/name@id:...)
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repo}:ref:refs/heads/main",
+            "repo:${local.github_owner}@*/${local.github_name}@*:ref:refs/heads/main",
+          ]
         }
       }
     }]
