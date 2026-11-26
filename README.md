@@ -1,10 +1,10 @@
 # Tips Splitter
 
-[![CI](https://github.com/carinabbusi/tips-splitter/actions/workflows/ci.yml/badge.svg)](https://github.com/carinabbusi/tips-splitter/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/carinabbusi/tips-splitter/actions/workflows/ci.yml/badge.svg)](https://github.com/carinabbusi/tips-splitter/actions/workflows/ci.yml)
 
-A small API that splits a team's tips fairly, to the cent, with a full DevOps toolchain around it: automated tests, a GitHub Actions CI pipeline and AWS infrastructure defined as code with Terraform.
+A small API that splits a team's tips fairly, to the cent, with a full DevOps toolchain around it: automated tests, a GitHub Actions CI/CD pipeline, Docker, and AWS infrastructure defined as code with Terraform.
 
-> Built for the **DevOps na Prática** course (Systems Analysis and Development, PUCRS Online), Phase 1: CI and Infrastructure as Code.
+> Built for the **DevOps na Prática** course (Systems Analysis and Development, PUCRS Online), Phase 1: CI and Infrastructure as Code. Phase 2: Continuous Delivery, containers, monitoring and security.
 
 ## The problem
 
@@ -36,17 +36,17 @@ The sample data is fictional.
 
 ```mermaid
 flowchart LR
-    Dev[Developer] -->|"git push / PR"| GH[GitHub repository]
-    GH --> CI{GitHub Actions CI}
-    CI --> T1["Ruff lint + format"]
-    CI --> T2["Pytest + coverage ≥ 90%"]
-    CI --> T3[API smoke test]
-    CI --> T4["Terraform fmt + validate"]
-    T4 -. "Phase 2: CD" .-> AWS
-    subgraph AWS[AWS eu-west-1]
-        ECR[(ECR registry)] --> EC2["EC2 t3.micro + Docker"]
-        EC2 --> CW[CloudWatch Logs]
+    Dev[Developer] -->|"branch + PR"| GH[GitHub]
+    GH --> T1["Lint, pip-audit, 61 tests"]
+    GH --> T2["Terraform validate + scan"]
+    T1 --> IMG["Docker build, smoke test, Trivy scan"]
+    IMG -->|"merge to main"| ECR[(Amazon ECR)]
+    ECR --> DEP["Deploy via SSM"]
+    subgraph AWS[AWS eu-north-1]
+        DEP --> EC2["EC2 t3.micro running the container"]
+        EC2 --> CW["CloudWatch Logs + alarms"]
     end
+    EC2 --> SMOKE["Public /health check"]
 ```
 
 | Layer | Tool |
@@ -54,9 +54,11 @@ flowchart LR
 | Application | Python 3.12, FastAPI |
 | Tests | pytest, pytest-cov (61 tests, ~99% coverage) |
 | Code quality | Ruff (lint + formatting) |
-| CI | GitHub Actions |
+| CI/CD | GitHub Actions (OIDC to AWS, no stored keys) |
+| Containers | Docker (non-root image with healthcheck) |
+| Security | pip-audit, Trivy (image + Terraform), Dependabot, protected main |
 | Infrastructure as Code | Terraform, AWS provider |
-| Cloud | AWS: ECR, EC2, IAM, Security Group, CloudWatch Logs |
+| Cloud | AWS: ECR, EC2, IAM, SSM, Security Group, CloudWatch Logs + alarms, SNS |
 | Dependency updates | Dependabot (pip, Actions, Terraform) |
 
 ## Run locally
@@ -80,22 +82,40 @@ curl -X POST http://127.0.0.1:8000/split \
   -d '{"entries":[{"date":"2026-09-01","amount":"10.00","workers":["Alex","Bia","Caio"]}]}'
 ```
 
-## CI pipeline
+## CI/CD pipeline
 
-`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+`.github/workflows/ci.yml` runs on every pull request and push to `main` (which is protected: changes only land through a PR with green checks).
 
-1. **Lint and tests**: installs dependencies, runs Ruff, runs pytest (fails under 90% coverage), starts the API and calls `/health`, uploads JUnit and coverage reports as artifacts.
-2. **Terraform**: checks formatting and validates the configuration. No AWS credentials are needed for this step.
+| Job | What it does | Runs on |
+|---|---|---|
+| Lint and tests | Ruff, pip-audit, pytest (fails under 90% coverage), API smoke test, test reports as artifacts | every PR and push |
+| Terraform | fmt, validate, Trivy config scan | every PR and push |
+| Docker image | build, run the container and call `/health`, Trivy image scan (fails on critical), push to ECR | build/scan always, push only on `main` |
+| Deploy | runs `deploy.sh` on the EC2 server through SSM, then checks the public `/health` | only on `main` |
+
+GitHub Actions authenticates to AWS with **OIDC**: no AWS keys are stored in GitHub, and the role only accepts the `main` branch of this repo.
+
+Repository variables used by the pipeline (Settings > Secrets and variables > Actions > Variables): `AWS_ROLE_ARN`, `AWS_REGION`, `ECR_REPOSITORY`, `INSTANCE_ID`, `APP_URL`. All come from `terraform output`.
+
+## Run with Docker
+
+```bash
+docker build -t tips-splitter .
+docker run -p 8000:8000 tips-splitter
+curl http://127.0.0.1:8000/health
+```
 
 ## Infrastructure (Terraform)
 
-`infra/terraform` describes the staging environment in AWS Ireland (`eu-west-1`):
+`infra/terraform` describes the staging environment in AWS Stockholm (`eu-north-1`):
 
 - **ECR** repository with scan on push and a lifecycle policy (keeps the last 5 images)
 - **EC2** `t3.micro` running Amazon Linux 2023 with Docker, IMDSv2 required and encrypted disk
 - **IAM** role with only what the server needs (pull images, SSM access, send logs)
 - **Security Group** allowing HTTP only. No SSH: the server is managed through AWS Systems Manager
 - **CloudWatch Logs** group with 7 day retention for the app's JSON logs
+- **CloudWatch alarms** for 5xx errors (metric filter on the JSON logs) and EC2 status checks, sent to an **SNS** topic (optional email)
+- **OIDC role** for GitHub Actions, limited to pushing to this ECR repo and running the deploy command
 
 ```bash
 cd infra/terraform
@@ -105,12 +125,14 @@ terraform apply      # creates resources in your AWS account
 terraform destroy    # remove everything when you're done, to avoid charges
 ```
 
-## Roadmap (Phase 2)
+## Roadmap
 
-- [ ] Dockerfile and image published to ECR
-- [ ] Continuous Delivery: deploy to EC2 automatically after CI passes
-- [ ] Remote Terraform state in S3
-- [ ] Security scanning (dependencies, container image, Terraform)
+- [x] Dockerfile and image published to ECR
+- [x] Continuous Delivery: deploy to EC2 automatically after CI passes
+- [x] Security scanning (dependencies, container image, Terraform)
+- [x] Monitoring: CloudWatch logs and alarms
+- [ ] Remote Terraform state in S3 with locking
+- [ ] HTTPS with a domain and a load balancer
 - [ ] Monthly PDF report and historical metrics per person and weekday
 
 ## Project structure
@@ -120,5 +142,6 @@ tips_splitter/      application code (rules, API, CLI, CSV loader)
 tests/              automated tests
 data/               fictional sample data
 infra/terraform/    infrastructure as code (AWS)
-.github/            CI workflow and Dependabot
+Dockerfile          container image
+.github/            CI/CD workflow and Dependabot
 ```

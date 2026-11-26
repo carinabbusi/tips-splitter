@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region. eu-west-1 is Ireland."
+  description = "AWS region. eu-north-1 is Stockholm."
   type        = string
-  default     = "eu-west-1"
+  default     = "eu-north-1"
 }
 
 variable "project_name" {
@@ -43,4 +43,16 @@ variable "log_retention_days" {
   description = "How long CloudWatch keeps application logs."
   type        = number
   default     = 7
+}
+
+variable "github_repo" {
+  description = "GitHub repository allowed to deploy (owner/name)."
+  type        = string
+  default     = "carinabbusi/tips-splitter"
+}
+
+variable "alert_email" {
+  description = "Email that receives CloudWatch alarms. Empty = no email."
+  type        = string
+  default     = ""
 }
