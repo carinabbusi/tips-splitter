@@ -83,7 +83,7 @@ jobs:
 
       - name: Security scan (Trivy config, report only)
         working-directory: .
-        run: docker run --rm -v "$PWD:/src" aquasec/trivy:0.58.1 config --exit-code 0 --severity HIGH,CRITICAL /src/infra/terraform
+        run: docker run --rm -v "$PWD:/src" aquasec/trivy:0.76.2 config --exit-code 0 --severity HIGH,CRITICAL /src/infra/terraform
 
   image:
     name: Docker image (build, test, scan, push)
@@ -116,12 +116,12 @@ jobs:
 
       - name: Scan image (Trivy, fails on critical)
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 \
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.2 \
             image --exit-code 1 --severity CRITICAL --ignore-unfixed --no-progress "$IMAGE"
 
       - name: Configure AWS credentials (OIDC)
         if: env.PUBLISH == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -153,7 +153,7 @@ jobs:
       APP_URL: ${{ vars.APP_URL }}
     steps:
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
