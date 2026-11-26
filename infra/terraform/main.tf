@@ -2,9 +2,7 @@ locals {
   name = "${var.project_name}-${var.environment}"
 }
 
-# ---------------------------------------------------------------------------
-# Network: use the account's default VPC to keep things simple and free.
-# ---------------------------------------------------------------------------
+# network: default VPC
 data "aws_vpc" "default" {
   default = true
 }
@@ -16,7 +14,7 @@ data "aws_subnets" "default" {
   }
 }
 
-# Latest Amazon Linux 2023 image, looked up from AWS's public parameter.
+# latest Amazon Linux 2023 AMI
 data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
@@ -43,9 +41,7 @@ resource "aws_security_group" "app" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Container registry: the CD pipeline (Phase 2) pushes Docker images here.
-# ---------------------------------------------------------------------------
+# container registry (images pushed by the CD pipeline)
 resource "aws_ecr_repository" "app" {
   name                 = local.name
   image_tag_mutability = "MUTABLE"
@@ -73,9 +69,7 @@ resource "aws_ecr_lifecycle_policy" "app" {
   })
 }
 
-# ---------------------------------------------------------------------------
-# Permissions for the server: pull images, be managed by SSM, send logs.
-# ---------------------------------------------------------------------------
+# instance role: pull images, SSM access, send logs
 resource "aws_iam_role" "app" {
   name = "${local.name}-ec2-role"
 
@@ -105,17 +99,13 @@ resource "aws_iam_instance_profile" "app" {
   role = aws_iam_role.app.name
 }
 
-# ---------------------------------------------------------------------------
-# Logs: the container sends its JSON logs here (Phase 2 monitoring).
-# ---------------------------------------------------------------------------
+# app logs (JSON, from the container)
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/${var.project_name}/${var.environment}"
   retention_in_days = var.log_retention_days
 }
 
-# ---------------------------------------------------------------------------
-# Server: one small EC2 instance with Docker installed.
-# ---------------------------------------------------------------------------
+# app server
 resource "aws_instance" "app" {
   ami                         = data.aws_ssm_parameter.al2023_ami.value
   instance_type               = var.instance_type
@@ -132,7 +122,7 @@ resource "aws_instance" "app" {
   })
   user_data_replace_on_change = true
 
-  # Security hardening: IMDSv2 only and encrypted disk.
+  # IMDSv2 only + encrypted disk
   metadata_options {
     http_tokens   = "required"
     http_endpoint = "enabled"

@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from . import __version__
 from .splitter import TipEntry, TipSplitError, split_period
 
-# Structured (JSON) logs: easy to search later in CloudWatch (Phase 2).
+# JSON logs so they can be queried in CloudWatch
 logger = logging.getLogger("tips_splitter")
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -77,7 +77,7 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Used by the load balancer / monitoring to check the app is alive."""
+    """Liveness check used by the deploy smoke test."""
     return {"status": "ok", "version": __version__}
 
 

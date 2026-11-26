@@ -1,4 +1,3 @@
-# Opens pull requests automatically when dependencies have updates or security fixes.
 version: 2
 updates:
   - package-ecosystem: pip

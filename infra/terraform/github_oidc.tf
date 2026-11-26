@@ -1,4 +1,4 @@
-# GitHub Actions authenticates with short-lived OIDC tokens (no AWS keys stored in GitHub)
+# GitHub Actions -> AWS via OIDC (no stored keys)
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
@@ -23,7 +23,7 @@ resource "aws_iam_role" "github_actions" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
-        # GitHub may send the subject with owner/repo IDs (repo:owner@id/name@id:...)
+        # newer tokens include owner/repo IDs: repo:owner@id/name@id:...
         StringLike = {
           "token.actions.githubusercontent.com:sub" = [
             "repo:${var.github_repo}:ref:refs/heads/main",
